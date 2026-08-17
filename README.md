@@ -1,12 +1,11 @@
 # Watermark Generator
 
-Local tool for creating and protecting watermark keys, maintaining signed
-manifests, and using provenance markers with LLMs.
+Tool for creating and protecting watermark keys, maintaining signed manifests,
+and applying a statistical provenance marker to **local LLMs**.
 
-There are two distinct modes:
-
-- **Local LLM:** real statistical application to logits before every token;
-- **Online LLM:** visible provenance marker added through a session instruction.
+This project works exclusively with local models that allow access to and
+modification of logits before every token sample. It does not apply statistical
+watermarks to ChatGPT, Codex, Claude, Gemini, or other online LLMs.
 
 A marker indicates declared provenance. By itself, it does not prove legal
 authorship, consent, approval, or endorsement.
@@ -42,38 +41,7 @@ run \
 The formula remains in `private/watermark.txt`, which is ignored by Git. The
 system stores only its hash in manifests.
 
-## Online LLM: visible session marker
-
-ChatGPT, Codex, Claude, Gemini, and other hosted LLMs do not expose their
-internal logits to this tool. Use a visible marker with these services.
-
-Paste the text below at the beginning of the conversation and replace the
-placeholders:
-
-```text
-VISIBLE PROVENANCE SESSION
-
-For this session, append the following visible provenance marker to each
-substantive natural-language response, without changing code, quotations,
-equations, hashes, URLs, identifiers, or structured data:
-
-<YOUR WATERMARK>
-
-This is an explicit visible marker only. Do not claim that a hidden statistical
-watermark was applied. Provenance does not imply consent, approval, authorship,
-or endorsement. Report the status as: <YOUR PREFIX>: VISIBLE MARK ONLY
-```
-
-The repository can also assemble this text from `private/watermark.txt`:
-
-```bash
-run session-prompt
-```
-
-This command neither uses nor displays the Watermark Key. It displays only the
-watermark you deliberately chose to copy into the conversation.
-
-## Local LLM: real statistical watermark
+## Statistical watermark for a local LLM
 
 For local Transformers-compatible models, install:
 
@@ -111,8 +79,8 @@ Type `/exit` to finish. During the session, the program:
 4. keeps the secret only in the process;
 5. calculates the statistical score of the generated text.
 
-The `<YOUR_PREFIX>: APPLIED` status is used only when logits were actually modified. It
-does not constitute confirmation of authorship or endorsement.
+The `<YOUR_PREFIX>: APPLIED` status is used only when logits were actually
+modified. It does not constitute confirmation of authorship or endorsement.
 
 ## File security
 

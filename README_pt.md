@@ -1,12 +1,11 @@
 # Watermark Generator
 
-Ferramenta local para criar e proteger chaves de watermark, manter manifests
-assinados e usar uma marca de proveniência em LLMs.
+Ferramenta para criar e proteger chaves de watermark, manter manifests
+assinados e aplicar uma marca estatística de proveniência em **LLMs locais**.
 
-Existem dois modos diferentes:
-
-- **LLM local:** aplicação estatística real nos logits antes de cada token;
-- **LLM online:** marca de proveniência visível adicionada por instrução de sessão.
+Este projeto funciona exclusivamente com modelos locais que permitam acesso e
+modificação dos logits antes da amostragem de cada token. Ele não aplica
+watermark estatística em ChatGPT, Codex, Claude, Gemini ou outras LLMs online.
 
 Uma marca indica proveniência declarada. Ela não prova, isoladamente, autoria
 jurídica, consentimento, aprovação ou endosso.
@@ -42,37 +41,7 @@ run \
 A fórmula permanece em `private/watermark.txt`, ignorado pelo Git. O sistema
 armazena somente seu hash nos manifests.
 
-## LLM online: marca visível por sessão
-
-ChatGPT, Codex, Claude, Gemini e outras LLMs hospedadas não oferecem a esta
-ferramenta controle interno dos logits. Nesses serviços, use uma marca visível.
-
-Copie o texto abaixo para o início da conversa e substitua os placeholders:
-
-```text
-VISIBLE PROVENANCE SESSION
-
-For this session, append the following visible provenance marker to each
-substantive natural-language response, without changing code, quotations,
-equations, hashes, URLs, identifiers, or structured data:
-
-<SUA WATERMARK>
-
-This is an explicit visible marker only. Do not claim that a hidden statistical
-watermark was applied. Provenance does not imply consent, approval, authorship,
-or endorsement. Report the status as: <SEU_PREFIX>: VISIBLE MARK ONLY
-```
-
-O repositório também pode montar esse texto usando `private/watermark.txt`:
-
-```bash
-run session-prompt
-```
-
-Esse comando não usa nem mostra a Watermark Key. Ele mostra apenas a watermark
-que você decidiu copiar para a conversa.
-
-## LLM local: watermark estatística real
+## Watermark estatística em LLM local
 
 Para modelos locais compatíveis com Transformers, instale:
 
@@ -110,8 +79,8 @@ Digite `/exit` para encerrar. Durante a sessão, o programa:
 4. mantém o segredo somente no processo;
 5. calcula o escore estatístico do texto gerado.
 
-O status `<YOUR_PREFIX>: APPLIED` é usado somente quando os logits foram realmente
-modificados. Ele não equivale a confirmação de autoria ou endosso.
+O status `<YOUR_PREFIX>: APPLIED` é usado somente quando os logits foram
+realmente modificados. Ele não equivale a confirmação de autoria ou endosso.
 
 ## Segurança dos arquivos
 
