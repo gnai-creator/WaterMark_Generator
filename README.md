@@ -31,11 +31,11 @@ WATERMARK_GENERATOR_PASSPHRASE='a-strong-and-unique-passphrase'
 ## Create identity and keys
 
 ```bash
-run init --prefix FMM
+run init --prefix <YOUR_PREFIX>
 
 run \
   --models all \
-  --prefix FMM \
+  --prefix <YOUR_PREFIX> \
   --watermark-file private/watermark.txt
 ```
 
@@ -111,7 +111,7 @@ Type `/exit` to finish. During the session, the program:
 4. keeps the secret only in the process;
 5. calculates the statistical score of the generated text.
 
-The `FMM: APPLIED` status is used only when logits were actually modified. It
+The `<YOUR_PREFIX>: APPLIED` status is used only when logits were actually modified. It
 does not constitute confirmation of authorship or endorsement.
 
 ## File security
@@ -133,7 +133,7 @@ Keep secure offline backups of the vault, state, public identity, and manifests.
 ```bash
 run status
 run rotate --model openai --reason compromised
-run revoke --key FMM-OPENAI-01 --reason compromised
+run revoke --key <YOUR_PREFIX>-OPENAI-01 --reason compromised
 run export --model openai
 run verify public/manifests/<manifest>.json --identity public/identity.json
 ```

@@ -31,11 +31,11 @@ O `.env` é ignorado pelo Git. Não o compartilhe nem versione.
 ## Criar identidade e chaves
 
 ```bash
-run init --prefix FMM
+run init --prefix <YOUR_PREFIX>
 
 run \
   --models all \
-  --prefix FMM \
+  --prefix <YOUR_PREFIX> \
   --watermark-file private/watermark.txt
 ```
 
@@ -110,7 +110,7 @@ Digite `/exit` para encerrar. Durante a sessão, o programa:
 4. mantém o segredo somente no processo;
 5. calcula o escore estatístico do texto gerado.
 
-O status `FMM: APPLIED` é usado somente quando os logits foram realmente
+O status `<YOUR_PREFIX>: APPLIED` é usado somente quando os logits foram realmente
 modificados. Ele não equivale a confirmação de autoria ou endosso.
 
 ## Segurança dos arquivos
@@ -132,7 +132,7 @@ Faça backups offline seguros do cofre, estado, identidade pública e manifests.
 ```bash
 run status
 run rotate --model openai --reason compromised
-run revoke --key FMM-OPENAI-01 --reason compromised
+run revoke --key <YOUR_PREFIX>-OPENAI-01 --reason compromised
 run export --model openai
 run verify public/manifests/<manifesto>.json --identity public/identity.json
 ```
