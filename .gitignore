@@ -1,0 +1,13 @@
+.env
+*.key
+*.pem
+*.secret
+secrets/
+private/*
+!private/.gitkeep
+.venv/
+__pycache__/
+.pytest_cache/
+*.egg-info/
+exports/
+state.json

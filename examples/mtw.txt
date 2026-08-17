@@ -1,0 +1,5 @@
+YOUR_OWN_AUTHORIZED_WATERMARK_SPECIFICATION
+
+The owner's MTW formula is intentionally omitted. Replace this placeholder with
+a specification you created or are authorized to use. Provenance is not
+consent, approval, endorsement, or conclusive proof of legal authorship.
