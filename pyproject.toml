@@ -13,6 +13,7 @@ dependencies = ["cryptography>=44"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
+local = ["torch", "transformers"]
 
 [project.scripts]
 watermark-generator = "watermark_generator.cli:main"

@@ -5,6 +5,8 @@
 secrets/
 private/*
 !private/.gitkeep
+public/*
+!public/.gitkeep
 .venv/
 __pycache__/
 .pytest_cache/

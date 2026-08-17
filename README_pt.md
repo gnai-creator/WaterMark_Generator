@@ -1,47 +1,15 @@
 # Watermark Generator
 
-CLI local e agnóstica de protocolo para gerar, rotacionar, revogar, exportar e
-verificar chaves criptográficas destinadas a watermarks de LLMs.
+Ferramenta local para criar e proteger chaves de watermark, manter manifests
+assinados e usar uma marca de proveniência em LLMs.
 
-O sistema separa dois papéis:
+Existem dois modos diferentes:
 
-- a **Identity Root**, baseada em Ed25519, autoriza criação, rotação e revogação;
-- as **Watermark Keys** são segredos operacionais independentes, derivados para
-  cada watermark, provedor e geração.
+- **LLM local:** aplicação estatística real nos logits antes de cada token;
+- **LLM online:** marca de proveniência visível adicionada por instrução de sessão.
 
-Assim, o vazamento de uma Watermark Key não permite, por si só, autorizar
-legitimamente sua sucessora.
-
-## Fórmula MTW não incluída
-
-A fórmula MTW específica do titular foi intencionalmente removida deste
-repositório. Ela não é distribuída como exemplo nem como autorização de uso.
-
-Use uma especificação de watermark criada por você ou para a qual possua
-autorização. Os placeholders da documentação devem ser substituídos antes do
-uso. Este aviso registra a intenção e as condições de disponibilização do
-projeto; eventuais direitos sobre fórmulas, textos, marcas ou implementações
-dependem da legislação aplicável.
-
-Uma watermark representa apenas um indício técnico de proveniência. Ela não é,
-isoladamente, prova conclusiva de autoria jurídica, consentimento, aprovação,
-endosso ou autorização de publicação.
-
-## Arquitetura de segurança
-
-- Identity Private Key Ed25519 e segredo mestre aleatório de 256 bits ficam em
-  um cofre local criptografado com AES-256-GCM.
-- A chave do cofre é derivada da passphrase por scrypt (`N=32768, r=8, p=1`).
-- Chaves de provedor são derivadas com HKDF-SHA256 e separação explícita de
-  domínio, watermark, prefixo, provedor e geração.
-- Manifests são serializados como JSON canônico, assinados com Ed25519 e
-  encadeados pelo hash SHA-256 do manifesto anterior.
-- Transições são irreversíveis: `ACTIVE -> REVOKED` ou `ACTIVE -> RETIRED`.
-- Atualizações com sequência inferior ao estado local são rejeitadas como
-  rollback.
-
-Segredos não são gravados em texto puro por padrão. `.env`, o cofre, exports e
-arquivos sensíveis são ignorados pelo Git.
+Uma marca indica proveniência declarada. Ela não prova, isoladamente, autoria
+jurídica, consentimento, aprovação ou endosso.
 
 ## Instalação
 
@@ -49,60 +17,128 @@ arquivos sensíveis são ignorados pelo Git.
 python3 -m venv .venv
 . .venv/bin/activate
 pip install -e '.[dev]'
+cp .env.example .env
 ```
 
-## Inicialização
+Edite `.env` e defina uma passphrase forte:
 
-```bash
-run init --prefix DEMO
+```dotenv
+WATERMARK_GENERATOR_PASSPHRASE='uma-passphrase-forte-e-unica'
 ```
 
-Guarde uma cópia offline segura da Identity Private Key e do cofre. A perda da
-Identity Root impede provar continuidade criptográfica em futuras rotações.
+O `.env` é ignorado pelo Git. Não o compartilhe nem versione.
 
-## Gerar chaves
-
-Com uma especificação própria:
+## Criar identidade e chaves
 
 ```bash
+run init --prefix FMM
+
 run \
   --models all \
-  --prefix DEMO \
-  --watermark 'SUA_ESPECIFICACAO_DE_WATERMARK'
+  --prefix FMM \
+  --watermark-file private/watermark.txt
 ```
 
-Ou por arquivo:
+A fórmula permanece em `private/watermark.txt`, ignorado pelo Git. O sistema
+armazena somente seu hash nos manifests.
 
-```bash
-run \
-  --models openai,anthropic \
-  --watermark-file examples/mtw.txt
+## LLM online: marca visível por sessão
+
+ChatGPT, Codex, Claude, Gemini e outras LLMs hospedadas não oferecem a esta
+ferramenta controle interno dos logits. Nesses serviços, use uma marca visível.
+
+Copie o texto abaixo para o início da conversa e substitua os placeholders:
+
+```text
+VISIBLE PROVENANCE SESSION
+
+For this session, append the following visible provenance marker to each
+substantive natural-language response, without changing code, quotations,
+equations, hashes, URLs, identifiers, or structured data:
+
+<SUA WATERMARK>
+
+This is an explicit visible marker only. Do not claim that a hidden statistical
+watermark was applied. Provenance does not imply consent, approval, authorship,
+or endorsement. Report the status as: <SEU_PREFIX>: VISIBLE MARK ONLY
 ```
 
-Os segredos não aparecem no terminal. `--show-secrets` exige uma decisão
-explícita e deve ser usado somente em ambiente controlado.
-
-## Rotação, revogação e estado
+O repositório também pode montar esse texto usando `private/watermark.txt`:
 
 ```bash
-run rotate --model openai --reason compromised
-run revoke --key DEMO-OPENAI-01 --reason compromised
+run session-prompt
+```
+
+Esse comando não usa nem mostra a Watermark Key. Ele mostra apenas a watermark
+que você decidiu copiar para a conversa.
+
+## LLM local: watermark estatística real
+
+Para modelos locais compatíveis com Transformers, instale:
+
+```bash
+pip install -e '.[local]'
+```
+
+Configure no `.env`:
+
+```dotenv
+WATERMARK_LOCAL_MODEL='/caminho/para/modelo-local'
+WATERMARK_INTENSITY_TABLE='private/intensity.json'
+WATERMARK_SESSION_PROVIDER='openai'
+WATERMARK_PERIOD=64
+WATERMARK_CONTEXT_WIDTH=4
+WATERMARK_GAMMA=0.5
+WATERMARK_STRENGTH=1.0
+WATERMARK_MINIMUM_TOKENS=100
+```
+
+`private/intensity.json` deve conter exatamente `WATERMARK_PERIOD` números
+finitos e não negativos calculados a partir da sua função privada.
+
+Inicie a sessão:
+
+```bash
+run session-local
+```
+
+Digite `/exit` para encerrar. Durante a sessão, o programa:
+
+1. deriva a chave ativa diretamente do cofre;
+2. obtém os logits reais do modelo local;
+3. aplica o bias antes de amostrar cada token;
+4. mantém o segredo somente no processo;
+5. calcula o escore estatístico do texto gerado.
+
+O status `FMM: APPLIED` é usado somente quando os logits foram realmente
+modificados. Ele não equivale a confirmação de autoria ou endosso.
+
+## Segurança dos arquivos
+
+| Caminho | Conteúdo | Compartilhar? |
+| --- | --- | --- |
+| `.env` | Passphrase e configuração local | **Nunca** |
+| `private/vault.json` | Identidade privada e segredo mestre criptografados | **Nunca** |
+| `private/watermark.txt` | Sua especificação | Apenas se decidir divulgá-la |
+| `exports/<provider>/key.env` | Chave operacional | **Nunca em chats ou Git** |
+| `public/identity.json` | Chave pública e fingerprint | Pode divulgar deliberadamente |
+| `public/manifests/*.json` | Histórico público assinado | Pode divulgar deliberadamente |
+
+`private/`, `exports/`, `public/`, `.env` e `state.json` são ignorados pelo Git.
+Faça backups offline seguros do cofre, estado, identidade pública e manifests.
+
+## Ciclo de vida e verificação
+
+```bash
 run status
-```
-
-## Verificação e exportação
-
-```bash
-run verify public/manifests/<manifesto>.json \
-  --identity public/identity.json
-
+run rotate --model openai --reason compromised
+run revoke --key FMM-OPENAI-01 --reason compromised
 run export --model openai
-run verification-bundle
+run verify public/manifests/<manifesto>.json --identity public/identity.json
 ```
 
-Uma nova sessão de LLM não conhece automaticamente a identidade. Para verificar
-continuidade, forneça a chave pública previamente confiada e a cadeia completa
-de manifests assinados.
+Nunca envie `KEY`, `key.env`, `.env`, passphrase, cofre, `master_secret` ou
+`identity_private_key` para uma conversa, issue, log ou repositório.
 
 ## Testes
 
@@ -110,5 +146,5 @@ de manifests assinados.
 pytest
 ```
 
-O projeto utiliza a biblioteca madura `cryptography`; nenhuma primitiva
-criptográfica é implementada manualmente.
+Detalhes técnicos estão em
+[`docs/watermark-interface.md`](docs/watermark-interface.md).

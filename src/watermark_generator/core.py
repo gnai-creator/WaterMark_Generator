@@ -178,6 +178,21 @@ def export_key(store: Store, passphrase: str, provider: str) -> Path:
     return path
 
 
+def active_key_material(store: Store, passphrase: str, provider: str) -> tuple[str, bytes]:
+    """Return one active provider key in memory without writing an export."""
+    if provider not in PROVIDERS:
+        raise WatermarkError("Invalid provider.")
+    state, sec = store.state(), store.secrets(passphrase)
+    wid, wm = _current(state)
+    active = next((record for record in wm["providers"].get(provider, [])
+                   if record["status"] == "ACTIVE"), None)
+    if not active:
+        raise WatermarkError(f"No active key for {provider}.")
+    key = derive_provider_key(unb64(sec["master_secret"]), wid, wm["prefix"],
+                              provider, active["generation"])
+    return active["key_id"], key
+
+
 def write_rotation_export(store: Store, state: dict, manifest: dict) -> Path:
     directory = store.root / "exports" / manifest["provider"]
     directory.mkdir(parents=True, exist_ok=True)
