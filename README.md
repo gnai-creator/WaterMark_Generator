@@ -1,32 +1,54 @@
 # Watermark Generator
 
-Local key lifecycle and provenance tooling for LLM watermarks.
+Local tool for creating and protecting watermark keys, maintaining signed
+manifests, and using provenance markers with LLMs.
 
-It supports two distinct modes:
+There are two distinct modes:
 
-- **Local LLMs:** real statistical logits modulation before every token sample.
-- **Hosted LLMs:** an explicit visible provenance marker requested per session.
+- **Local LLM:** real statistical application to logits before every token;
+- **Online LLM:** visible provenance marker added through a session instruction.
 
-Provenance does not by itself prove legal authorship, consent, approval, or
-endorsement.
+A marker indicates declared provenance. By itself, it does not prove legal
+authorship, consent, approval, or endorsement.
 
-## Install and initialize
+## Installation
 
 ```bash
 python3 -m venv .venv
 . .venv/bin/activate
 pip install -e '.[dev]'
 cp .env.example .env
-run init --prefix FMM
-run --models all --prefix FMM --watermark-file private/watermark.txt
 ```
 
-Set a strong `WATERMARK_GENERATOR_PASSPHRASE` in `.env`. Never commit or share
-that file.
+Edit `.env` and define a strong passphrase:
 
-## Hosted LLMs: visible session marker
+```dotenv
+WATERMARK_GENERATOR_PASSPHRASE='a-strong-and-unique-passphrase'
+```
 
-Paste the following at the beginning of a hosted LLM conversation:
+`.env` is ignored by Git. Do not share or commit it.
+
+## Create identity and keys
+
+```bash
+run init --prefix FMM
+
+run \
+  --models all \
+  --prefix FMM \
+  --watermark-file private/watermark.txt
+```
+
+The formula remains in `private/watermark.txt`, which is ignored by Git. The
+system stores only its hash in manifests.
+
+## Online LLM: visible session marker
+
+ChatGPT, Codex, Claude, Gemini, and other hosted LLMs do not expose their
+internal logits to this tool. Use a visible marker with these services.
+
+Paste the text below at the beginning of the conversation and replace the
+placeholders:
 
 ```text
 VISIBLE PROVENANCE SESSION
@@ -42,16 +64,18 @@ watermark was applied. Provenance does not imply consent, approval, authorship,
 or endorsement. Report the status as: <YOUR PREFIX>: VISIBLE MARK ONLY
 ```
 
-Or generate it from the gitignored `private/watermark.txt`:
+The repository can also assemble this text from `private/watermark.txt`:
 
 ```bash
 run session-prompt
 ```
 
-No key is used or displayed. Hosted conversations do not expose the internal,
-stateful per-token logits control required for statistical application.
+This command neither uses nor displays the Watermark Key. It displays only the
+watermark you deliberately chose to copy into the conversation.
 
-## Local LLMs: statistical application
+## Local LLM: real statistical watermark
+
+For local Transformers-compatible models, install:
 
 ```bash
 pip install -e '.[local]'
@@ -64,25 +88,47 @@ WATERMARK_LOCAL_MODEL='/path/to/local-model'
 WATERMARK_INTENSITY_TABLE='private/intensity.json'
 WATERMARK_SESSION_PROVIDER='openai'
 WATERMARK_PERIOD=64
+WATERMARK_CONTEXT_WIDTH=4
+WATERMARK_GAMMA=0.5
+WATERMARK_STRENGTH=1.0
+WATERMARK_MINIMUM_TOKENS=100
 ```
 
-Then start one local session:
+`private/intensity.json` must contain exactly `WATERMARK_PERIOD` finite,
+non-negative numbers calculated from your private function.
+
+Start the session:
 
 ```bash
 run session-local
 ```
 
-The command derives the active key in memory, obtains actual next-token logits,
-applies the keyed bias before sampling, and reports a statistical score. Type
-`/exit` to finish. `APPLIED` is reported only after real logits modification.
+Type `/exit` to finish. During the session, the program:
 
-## Security boundaries
+1. derives the active key directly from the vault;
+2. obtains the local model's actual logits;
+3. applies the bias before sampling each token;
+4. keeps the secret only in the process;
+5. calculates the statistical score of the generated text.
 
-Never share `.env`, `private/vault.json`, `exports/*/key.env`, a passphrase,
-`KEY`, `master_secret`, or `identity_private_key`. Public identity and signed
-manifests may be disclosed deliberately, but `public/` is gitignored by default.
+The `FMM: APPLIED` status is used only when logits were actually modified. It
+does not constitute confirmation of authorship or endorsement.
 
-Lifecycle commands:
+## File security
+
+| Path | Contents | Share? |
+| --- | --- | --- |
+| `.env` | Passphrase and local configuration | **Never** |
+| `private/vault.json` | Encrypted private identity and master secret | **Never** |
+| `private/watermark.txt` | Your specification | Only if you decide to disclose it |
+| `exports/<provider>/key.env` | Operational key | **Never in chats or Git** |
+| `public/identity.json` | Public key and fingerprint | May be deliberately disclosed |
+| `public/manifests/*.json` | Signed public history | May be deliberately disclosed |
+
+`private/`, `exports/`, `public/`, `.env`, and `state.json` are ignored by Git.
+Keep secure offline backups of the vault, state, public identity, and manifests.
+
+## Lifecycle and verification
 
 ```bash
 run status
@@ -92,11 +138,14 @@ run export --model openai
 run verify public/manifests/<manifest>.json --identity public/identity.json
 ```
 
+Never send `KEY`, `key.env`, `.env`, a passphrase, the vault, `master_secret`,
+or `identity_private_key` to a conversation, issue, log, or repository.
+
 ## Tests
 
 ```bash
 pytest
 ```
 
-See [`docs/watermark-interface.md`](docs/watermark-interface.md) for the complete
-runtime contract and security invariants.
+Technical details are available in
+[`docs/watermark-interface.md`](docs/watermark-interface.md).
