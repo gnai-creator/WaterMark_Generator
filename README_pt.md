@@ -82,6 +82,45 @@ Digite `/exit` para encerrar. Durante a sessão, o programa:
 O status `<YOUR_PREFIX>: APPLIED` é usado somente quando os logits foram
 realmente modificados. Ele não equivale a confirmação de autoria ou endosso.
 
+## Reescrever texto de uma LLM online
+
+Um texto produzido por uma LLM online pode ser regenerado pelo modelo local com
+a watermark estatística:
+
+1. Coloque sua própria fórmula ou especificação em
+   `private/watermark.txt`. Não use a fórmula de terceiros sem autorização.
+2. Gere a identidade e as chaves conforme a seção anterior.
+3. Calcule os valores da sua função para um período completo e salve exatamente
+   `WATERMARK_PERIOD` números em `private/intensity.json`.
+4. Salve o texto recebido da LLM online em `private/texto-original.txt`.
+
+Exemplo de estrutura da tabela para um período 4 — os valores abaixo são apenas
+ilustrativos e devem ser substituídos pelos valores da sua função:
+
+```json
+[0.0, 0.5, 1.0, 0.5]
+```
+
+Execute:
+
+```bash
+run rewrite-local \
+  --input private/texto-original.txt \
+  --output private/texto-com-watermark.txt \
+  --device cpu \
+  --max-new-tokens 128
+```
+
+O comando usa as mesmas configurações de `session-local` presentes no `.env`.
+Ele instrui o modelo local a preservar significado, fatos, nomes, números,
+citações, código, comandos, URLs, hashes, identificadores, equações e dados
+estruturados, enquanto aplica o bias antes de cada novo token.
+
+Esse processo cria um texto novo; ele não altera invisivelmente os mesmos
+bytes. Modelos podem introduzir diferenças, portanto o resultado deve ser
+revisado antes da publicação. `APPLIED` confirma a modulação dos logits, não a
+equivalência semântica perfeita.
+
 ## Segurança dos arquivos
 
 | Caminho | Conteúdo | Compartilhar? |

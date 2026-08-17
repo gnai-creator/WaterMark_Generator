@@ -118,6 +118,21 @@ def parser() -> argparse.ArgumentParser:
     session.add_argument("--random-seed", type=int)
     session.add_argument("--device", default="auto")
     session.add_argument("--allow-download", action="store_true")
+    rewrite = sub.add_parser("rewrite-local", help="rewrite online-LLM text with a local statistical watermark")
+    rewrite.add_argument("--input", required=True, type=Path)
+    rewrite.add_argument("--output", type=Path)
+    rewrite.add_argument("--model")
+    rewrite.add_argument("--provider", choices=PROVIDERS)
+    rewrite.add_argument("--intensity-table", type=Path)
+    rewrite.add_argument("--document-id")
+    rewrite.add_argument("--timestamp")
+    rewrite.add_argument("--max-new-tokens", type=int, default=512)
+    rewrite.add_argument("--temperature", type=float, default=0.5)
+    rewrite.add_argument("--top-k", type=int, default=0)
+    rewrite.add_argument("--top-p", type=float, default=0.95)
+    rewrite.add_argument("--random-seed", type=int)
+    rewrite.add_argument("--device", default="auto")
+    rewrite.add_argument("--allow-download", action="store_true")
     return p
 
 
@@ -186,6 +201,37 @@ This is an explicit visible marker only. Do not claim that a hidden statistical
 watermark was applied. Provenance does not imply consent, approval, authorship,
 or endorsement. Report the status as: FMM: VISIBLE MARK ONLY
 """
+
+
+def _adapter_from_vault(store: Store, provider: str, intensity: TableIntensity,
+                        config: WatermarkConfig) -> WatermarkAdapter:
+    """Derive an active key and expose it to the adapter only during construction."""
+    key_id, key = active_key_material(store, password(store.root), provider)
+    previous_key, previous_id = os.environ.get("KEY"), os.environ.get("KEY_ID")
+    try:
+        os.environ["KEY"], os.environ["KEY_ID"] = b64(key), key_id
+        return WatermarkAdapter.from_environment(intensity, config)
+    finally:
+        if previous_key is None: os.environ.pop("KEY", None)
+        else: os.environ["KEY"] = previous_key
+        if previous_id is None: os.environ.pop("KEY_ID", None)
+        else: os.environ["KEY_ID"] = previous_id
+
+
+def _local_settings(store: Store, args: argparse.Namespace) -> tuple[str, str, TableIntensity, WatermarkConfig]:
+    model = _setting(store.root, "WATERMARK_LOCAL_MODEL", args.model)
+    provider = _setting(store.root, "WATERMARK_SESSION_PROVIDER", args.provider)
+    intensity_path = _setting(store.root, "WATERMARK_INTENSITY_TABLE", args.intensity_table)
+    if not model or not provider or not intensity_path:
+        raise WatermarkError("Configure local model, session provider, and intensity table in .env or arguments.")
+    table_path = Path(intensity_path)
+    if not table_path.is_absolute(): table_path = store.root / table_path
+    model_path = Path(model)
+    if not model_path.is_absolute() and not args.allow_download:
+        model = str(store.root / model_path)
+    config = _session_config(store.root)
+    intensity = TableIntensity(tuple(_json_array(table_path, "Intensity table")))
+    return model, provider, intensity, config
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -281,29 +327,8 @@ def main(argv: list[str] | None = None) -> int:
             print(_visible_session_prompt(specification))
         elif args.command == "session-local":
             from .local_runtime import GenerationConfig, TransformersRuntime, generate_local
-            model = _setting(store.root, "WATERMARK_LOCAL_MODEL", args.model)
-            provider = _setting(store.root, "WATERMARK_SESSION_PROVIDER", args.provider)
-            intensity_path = _setting(store.root, "WATERMARK_INTENSITY_TABLE", args.intensity_table)
-            if not model or not provider or not intensity_path:
-                raise WatermarkError("Configure local model, session provider, and intensity table in .env or arguments.")
-            intensity_path = Path(intensity_path)
-            if not intensity_path.is_absolute():
-                intensity_path = store.root / intensity_path
-            model_path = Path(model)
-            if not model_path.is_absolute() and not args.allow_download:
-                model = str(store.root / model_path)
-            config = _session_config(store.root)
-            intensity = TableIntensity(tuple(_json_array(intensity_path, "Intensity table")))
-            key_id, key = active_key_material(store, password(store.root), provider)
-            previous_key, previous_id = os.environ.get("KEY"), os.environ.get("KEY_ID")
-            try:
-                os.environ["KEY"], os.environ["KEY_ID"] = b64(key), key_id
-                adapter = WatermarkAdapter.from_environment(intensity, config)
-            finally:
-                if previous_key is None: os.environ.pop("KEY", None)
-                else: os.environ["KEY"] = previous_key
-                if previous_id is None: os.environ.pop("KEY_ID", None)
-                else: os.environ["KEY_ID"] = previous_id
+            model, provider, intensity, config = _local_settings(store, args)
+            adapter = _adapter_from_vault(store, provider, intensity, config)
             runtime = TransformersRuntime(model, device=args.device, allow_download=args.allow_download)
             generation = GenerationConfig(args.max_new_tokens, args.temperature, args.top_k,
                                           args.top_p, args.random_seed)
@@ -324,6 +349,29 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"FMM: APPLIED | z={result.detection.z_score:.4f} | sample={sample}", file=sys.stderr)
                 history = model_prompt + result.text + "\n"
                 pending = None
+        elif args.command == "rewrite-local":
+            from .local_runtime import GenerationConfig, TransformersRuntime, rewrite_local
+            model, provider, intensity, config = _local_settings(store, args)
+            adapter = _adapter_from_vault(store, provider, intensity, config)
+            try:
+                source_text = args.input.read_text(encoding="utf-8")
+            except (OSError, UnicodeError) as exc:
+                raise WatermarkError("Input text is unreadable.") from exc
+            runtime = TransformersRuntime(model, device=args.device, allow_download=args.allow_download)
+            generation = GenerationConfig(args.max_new_tokens, args.temperature, args.top_k,
+                                          args.top_p, args.random_seed)
+            result = rewrite_local(runtime, adapter, source_text,
+                                   args.document_id or f"rewrite-{secrets.token_hex(12)}",
+                                   args.timestamp or now(), generation)
+            if args.output:
+                output_path = args.output if args.output.is_absolute() else store.root / args.output
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+                output_path.write_text(result.text, encoding="utf-8")
+                print(output_path)
+            else:
+                print(result.text)
+            sample = "sufficient" if result.detection.sufficient_sample else "insufficient"
+            print(f"FMM: APPLIED | z={result.detection.z_score:.4f} | sample={sample}", file=sys.stderr)
         else:
             if not args.models or bool(args.watermark) == bool(args.watermark_file):
                 parser().error("generation requires --models and exactly one of --watermark/--watermark-file")

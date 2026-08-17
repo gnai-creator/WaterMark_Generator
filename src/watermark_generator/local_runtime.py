@@ -99,6 +99,24 @@ def generate_local(runtime: CausalRuntime, adapter: WatermarkAdapter, prompt: st
                             len(generated), adapter.key_id, "APPLIED", detection)
 
 
+def rewrite_local(runtime: CausalRuntime, adapter: WatermarkAdapter, source_text: str,
+                  document_id: str, timestamp: str,
+                  generation: GenerationConfig | None = None) -> GenerationResult:
+    """Regenerate supplied text locally while applying the watermark to new tokens."""
+    if not source_text.strip():
+        raise WatermarkError("Source text must not be empty.")
+    prompt = """Rewrite the SOURCE as faithful, natural prose.
+Preserve meaning, facts, names, numbers, citations, and intent exactly.
+Do not modify code, commands, URLs, hashes, identifiers, equations, quotations,
+or structured data. Do not add commentary, claims, or new information.
+Return only the rewritten text.
+
+SOURCE
+<<<
+""" + source_text + "\n>>>\n\nREWRITTEN TEXT\n"
+    return generate_local(runtime, adapter, prompt, document_id, timestamp, generation)
+
+
 class TransformersRuntime:
     """Lazy optional adapter for a Hugging Face causal language model."""
 
@@ -116,11 +134,9 @@ class TransformersRuntime:
             self._tokenizer = AutoTokenizer.from_pretrained(
                 path, local_files_only=not allow_download, trust_remote_code=False)
             model_kwargs = {"local_files_only": not allow_download, "trust_remote_code": False}
-            if device == "auto":
-                model_kwargs["device_map"] = "auto"
             self._model = AutoModelForCausalLM.from_pretrained(path, **model_kwargs)
-            if device != "auto":
-                self._model.to(device)
+            selected_device = ("cuda" if torch.cuda.is_available() else "cpu") if device == "auto" else device
+            self._model.to(selected_device)
             self._model.eval()
             self._torch = torch
             self._device = next(self._model.parameters()).device
